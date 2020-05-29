@@ -373,6 +373,31 @@ func (b *binding) QueryPerfettoServiceState(ctx context.Context) (*device.Perfet
 	return result, nil
 }
 
+// Currently using Android Q/10, API 29 as ANGLE support cut-off
+func (b *binding) SupportsAngle(ctx context.Context) bool {
+	os := b.Instance().GetConfiguration().GetOS()
+	return os.GetAPIVersion() >= 29
+}
+
+func (b *binding) QueryAnglePackageName(ctx context.Context) (string, error) {
+	if !b.SupportsAngle(ctx) {
+		return "", fmt.Errorf("ANGLE not supported on this device")
+	}
+	// ANGLE supported, so check for installed ANGLE package
+	// Favor custom installed package first, followed by default system package
+	custom := "com.chromium.angle"
+	system := "com.google.android.angle"
+	// Check installed packages for ANGLE package
+	packages, _ := b.InstalledPackages(ctx)
+	if pkg := packages.FindByName(custom); pkg != nil {
+		return custom, nil
+	}
+	if pkg := packages.FindByName(system); pkg != nil {
+		return system, nil
+	}
+	return "", fmt.Errorf("No ANGLE packages installed on this device")
+}
+
 func extrasFlags(extras []android.ActionExtra) []string {
 	flags := []string{}
 	for _, e := range extras {

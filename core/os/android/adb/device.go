@@ -132,6 +132,34 @@ func SetupPrereleaseDriver(ctx context.Context, d Device, p *android.InstalledPa
 	}, nil
 }
 
+func SetupAngle(ctx context.Context, d Device) (app.Cleanup, error) {
+	// Restore ANGLE settings during app cleanup
+	// TODO: Am I cleaning up these settings correctly?
+	angleDriverValues, err := d.SystemSetting(ctx, "global", "angle_gl_driver_selection_values")
+	if err != nil {
+		return nil, log.Err(ctx, err, "Failed to get original ANGLE driver selection name.")
+	}
+	angleDriverPkgs, err := d.SystemSetting(ctx, "global", "angle_gl_driver_selection_pkgs")
+	if err != nil {
+		return nil, log.Err(ctx, err, "Failed to get original ANGLE enabled packages.")
+	}
+	anglePackage, err := d.SystemSetting(ctx, "global", "angle_debug_package")
+	if err != nil {
+		return nil, log.Err(ctx, err, "Failed to get original ANGLE package name.")
+	}
+	log.I(ctx, "Saved original ANGLE pkg %s for app %s to restore during cleanup.", angle_package, angle_driver_pkgs)
+	// We successfully saved old settings, now set new ANGLE values for tracing
+	d.SetSystemSetting(ctx, "global", "angle_gl_driver_selection_values", "angle")
+	d.SetSystemSetting(ctx, "global", "angle_debug_package", anglePackage)
+	d.SetSystemSetting(ctx, "global", "angle_gl_driver_selection_pkgs", p.Name)
+	// Return cleanup function to restore original ANGLE settings
+	return func(ctx context.Context) {
+		d.SetSystemSetting(ctx, "global", "angle_gl_driver_selection_values", angle_driver_values)
+		d.SetSystemSetting(ctx, "global", "angle_gl_driver_selection_pkgs", angle_driver_pkgs)
+		d.SetSystemSetting(ctx, "global", "angle_debug_package", angle_package)
+	}, nil
+}
+
 func newDevice(ctx context.Context, serial string, status bind.Status) (*binding, error) {
 	d := &binding{
 		Simple: bind.Simple{
@@ -215,6 +243,11 @@ func newDevice(ctx context.Context, serial string, status bind.Status) (*binding
 	// Query device Perfetto service state
 	if perfettoCapability, err := d.QueryPerfettoServiceState(ctx); err == nil {
 		d.To.Configuration.PerfettoCapability = perfettoCapability
+	}
+
+	// Query device ANGLE support
+	if anglePackage, err := d.QueryAnglePackageName(ctx); err == nil {
+		d.To.Configuration.AnglePackage = anglePackage
 	}
 
 	// If the VkRenderStagesProducer layer exist, we assume the render stages producer is
